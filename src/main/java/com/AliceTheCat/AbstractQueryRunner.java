@@ -1,9 +1,12 @@
 package com.AliceTheCat;
 
+import java.beans.IntrospectionException;
+import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.sql.*;
+import java.util.Arrays;
 
 /**
  * The base class for QueryRunner &amp; AsyncQueryRunner. This class is thread safe.
@@ -36,6 +39,25 @@ public abstract class AbstractQueryRunner {
     public void fillStatement(final PreparedStatement stmt, final Object... params)
             throws SQLException {
         // TODO
+        if (stmt == null || params == null) return;
+
+        ParameterMetaData pmd = stmt.getParameterMetaData();
+        if (pmd.getParameterCount() != params.length) {
+            throw new SQLException("Unmatched parameters number (expected " + pmd.getParameterCount()
+                    + ", actual " + params.length);
+        }
+
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] != null) {
+                stmt.setObject(i + 1, params[i]);
+            } else {
+                // note from dbutils
+                // VARCHAR works with many drivers regardless
+                // of the actual column type. Oddly, NULL and
+                // OTHER don't work with Oracle's drivers.
+                stmt.setNull(i + 1, Types.VARCHAR);
+            }
+        }
     }
 
     /**
@@ -51,6 +73,26 @@ public abstract class AbstractQueryRunner {
     public void fillStatementWithBean(final PreparedStatement stmt, final Object bean,
                                       final PropertyDescriptor[] properties) throws SQLException {
         // TODO
+        if (stmt == null || bean == null || properties == null) {
+            return;
+        }
+        Object[] params = new Object[properties.length];
+        for (int i = 0; i < params.length; i++) {
+            PropertyDescriptor propertyDescriptor = properties[i];
+            Method readMethod = propertyDescriptor.getReadMethod();
+            Object value;
+            if (readMethod == null) {
+                throw new RuntimeException("No read method for property " + propertyDescriptor.getName()
+                        + " in class " + bean.getClass());
+            }
+            try {
+                value = readMethod.invoke(bean);
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                throw new RuntimeException("Couldn't invoke method: " + readMethod, e);
+            }
+            params[i] = value;
+        }
+        fillStatement(stmt, params);
     }
 
     /**
@@ -67,6 +109,33 @@ public abstract class AbstractQueryRunner {
     public void fillStatementWithBean(final PreparedStatement stmt, final Object bean,
                                       final String... propertyNames) throws SQLException {
         // TODO
+        PropertyDescriptor[] properties;
+        try {
+            properties = Introspector.getBeanInfo(bean.getClass()).getPropertyDescriptors();
+        } catch (IntrospectionException e) {
+            throw new RuntimeException("Cannot introspect class " + bean.getClass().toString());
+        }
+        // we need to sort PropertyDescriptor according to propertyNames
+        PropertyDescriptor[] sorted = new PropertyDescriptor[propertyNames.length];
+        for (int i = 0; i < propertyNames.length; i++) {
+            String propertyName = propertyNames[i];
+            if (propertyName == null) {
+                throw new NullPointerException("Property name cannot be null");
+            }
+            boolean found = false;
+            for (PropertyDescriptor property : properties) {
+                if (propertyName.equals(property.getName())) {
+                    found = true;
+                    sorted[i] = property;
+                    break;
+                }
+            }
+            if (!found) {
+                throw new RuntimeException("Cannot find property with name " + propertyName
+                        + " in class" + bean.getClass().toString());
+            }
+        }
+        fillStatementWithBean(stmt, bean, sorted);
     }
 
     /**
@@ -81,8 +150,27 @@ public abstract class AbstractQueryRunner {
      */
     protected void rethrow(final SQLException cause, final String sql, final Object... params)
             throws SQLException {
-
         // TODO
+        String causeMessage = cause.getMessage();
+        if(causeMessage == null) {
+            causeMessage = "";
+        }
+
+        StringBuffer newCauseMessage = new StringBuffer(causeMessage);
+
+        newCauseMessage.append(" Query: ");
+        newCauseMessage.append(sql);
+        newCauseMessage.append(" Params: ");
+
+        if(params == null) {
+            newCauseMessage.append("[]");
+        } else {
+            newCauseMessage.append(Arrays.deepToString(params));
+        }
+
+        final SQLException e = new SQLException(newCauseMessage.toString(), cause.getSQLState(), cause.getCause());
+        e.setNextException(cause);
+        throw e;
     }
 
     /**

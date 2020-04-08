@@ -62,7 +62,7 @@ public class ArrayHandler implements ResultSetHandler<Object[]> {
      */
     public Object[] handle(final ResultSet rs) throws SQLException {
         // TODO
-        return null;
+        return rs.next() ? this.convert.toArray(rs) : EMPTY_ARRAY;
     }
 
 }

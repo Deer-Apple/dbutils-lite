@@ -1,7 +1,6 @@
 package com.AliceTheCat;
 
-import java.sql.Connection;
-import java.sql.SQLException;
+import java.sql.*;
 
 /**
  * Executes SQL queries with pluggable strategies for handling
@@ -32,7 +31,46 @@ public class QueryRunner extends AbstractQueryRunner {
     private <T> T query(final Connection conn, final boolean closeConn, final String sql, final ResultSetHandler<T> rsh, final Object... params)
             throws SQLException {
         // TODO
-        return null;
+        if (conn == null) {
+            throw new SQLException("database connection is null");
+        } else if (conn.isClosed()) {
+            throw new SQLException("database connection is closed");
+        }
+
+        if (sql == null) {
+            throw new SQLException("SQL query cannot be null");
+        }
+
+        if (rsh == null) {
+            throw new SQLException("ResultSetHandler cannot be null");
+        }
+
+        ResultSet rs = null;
+        T result = null;
+
+        try {
+            if (params != null && params.length > 0) {
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                this.fillStatement(stmt, params);
+                rs = stmt.executeQuery();
+
+                stmt.close();
+
+                result = rsh.handle(rs);
+            } else {
+                Statement stmt = conn.createStatement();
+                rs = stmt.executeQuery(sql);
+
+                stmt.close();
+
+                result = rsh.handle(rs);
+            }
+        } catch (SQLException e) {
+            this.rethrow(e, sql, params);
+        } finally {
+            rs.close();
+        }
+        return result;
     }
 
     /**
@@ -48,7 +86,37 @@ public class QueryRunner extends AbstractQueryRunner {
      */
     private int update(final Connection conn, final boolean closeConn, final String sql, final Object... params) throws SQLException {
         // TODO
-        return -1;
+        if (conn == null) {
+            throw new SQLException("database connection is null");
+        } else if (conn.isClosed()) {
+            throw new SQLException("database connection is closed");
+        }
+
+        if (sql == null) {
+            throw new SQLException("SQL query cannot be null");
+        }
+
+        int row = 0;
+
+        try {
+            if (params != null && params.length > 0) {
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                this.fillStatement(stmt, params);
+                row = stmt.executeUpdate();
+
+                stmt.close();
+            } else {
+                Statement stmt = conn.createStatement();
+                row = stmt.executeUpdate(sql);
+
+                stmt.close();
+            }
+        } catch (SQLException e) {
+            this.rethrow(e, sql, params);
+        }
+
+
+        return row;
     }
 
     /**
@@ -67,7 +135,36 @@ public class QueryRunner extends AbstractQueryRunner {
     private <T> T insert(final Connection conn, final boolean closeConn, final String sql, final ResultSetHandler<T> rsh, final Object... params)
             throws SQLException {
         // TODO
-        return null;
+        if (conn == null) {
+            throw new SQLException("database connection is null");
+        } else if (conn.isClosed()) {
+            throw new SQLException("database connection is closed");
+        }
+
+        if (sql == null) {
+            throw new SQLException("SQL query cannot be null");
+        }
+
+        T result = null;
+
+        try {
+            if (params != null && params.length > 0) {
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                this.fillStatement(stmt, params);
+                stmt.executeUpdate();
+                result = rsh.handle(stmt.getGeneratedKeys());
+                stmt.close();
+            } else {
+                Statement stmt = conn.createStatement();
+                stmt.executeUpdate(sql);
+                result = rsh.handle(stmt.getGeneratedKeys());
+                stmt.close();
+            }
+        } catch (SQLException e) {
+            this.rethrow(e, sql, params);
+        }
+
+        return result;
     }
 
     /**
@@ -86,7 +183,32 @@ public class QueryRunner extends AbstractQueryRunner {
     private <T> T insertBatch(final Connection conn, final boolean closeConn, final String sql, final ResultSetHandler<T> rsh, final Object[][] params)
             throws SQLException {
         // TODO
-        return null;
+        if (conn == null) {
+            throw new SQLException("database connection is null");
+        } else if (conn.isClosed()) {
+            throw new SQLException("database connection is closed");
+        }
+
+        if (sql == null) {
+            throw new SQLException("SQL query cannot be null");
+        }
+
+        T result = null;
+
+        try {
+            PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+
+            for (Object[] param : params) {
+                this.fillStatement(stmt, param);
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+            result = rsh.handle(stmt.getGeneratedKeys());
+        } catch (SQLException e) {
+            this.rethrow(e, sql, params);
+        }
+
+        return result;
     }
 }
 
