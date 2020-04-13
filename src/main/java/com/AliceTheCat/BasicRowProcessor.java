@@ -72,7 +72,7 @@ public class BasicRowProcessor implements RowProcessor {
      */
     public <T> T toBean(final ResultSet rs, final Class<? extends T> type) throws SQLException {
         // TODO
-        return null;
+        return this.convert.toBean(rs, type);
     }
 
     /**
@@ -87,7 +87,7 @@ public class BasicRowProcessor implements RowProcessor {
      */
     public <T> List<T> toBeanList(final ResultSet rs, final Class<? extends T> type) throws SQLException {
         // TODO
-        return null;
+        return this.convert.toBeanList(rs, type);
     }
 
     /**
